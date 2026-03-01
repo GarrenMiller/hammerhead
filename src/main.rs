@@ -1,45 +1,24 @@
-use anyhow::Result;
-use std::fs::File;
-use std::io::Write;
-use waverave_hackrf::open_hackrf;
 use clap::Parser;
 
 mod lte;
+mod hackrf;
 
-
-// #[tokio::main]
-// async fn main() -> Result<()> {
-//     let mut hackrf = open_hackrf()?;
-//     hackrf.set_sample_rate(15_360_000.0).await?;
-//     hackrf.set_lna_gain(24).await?;
-//     hackrf.set_vga_gain(16).await?;
-//     hackrf.set_freq(754_000_000).await?;
-//
-//     let mut file = File::create("lte_capture.c8")?;
-//     let mut rx = hackrf.start_rx(131072).await.map_err(|e| e.err)?;
-//
-//     for _ in 0..128 { rx.submit(); }
-//
-//     // 23.04M samples/sec * 0.1 sec * 2 bytes/sample = 4,608,000 bytes total
-//     // With 131,072 byte chunks, 35 iterations is ~0.1 seconds.
-//     for _ in 0..24 {
-//         let buf = rx.next_complete().await?;
-//         file.write_all(buf.bytes())?;
-//         rx.submit();
-//     }
-//
-//     rx.stop().await?;
-//     Ok(())
-// }
 #[derive(Parser)]
 struct Cli {
     /// The file to process; expects a .c8 file with interleaved I/Q bits
-    file: std::path::PathBuf
+    file: Option<std::path::PathBuf>,
+    /// Whether or not to gather data to a file
+    #[arg(long)]
+    gather: bool
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = Cli::parse();
-    lte::c8::process_file(args.file);
-    // zadoff_chu::get_zc_sequence();
-    // zadoff_chu::get_correlation_values();
+    if let Some(file) = args.file {
+        lte::c8::process_file(file);
+    }
+    if args.gather {
+        hackrf::driver::run().await;
+    }
 }
