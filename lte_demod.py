@@ -91,46 +91,69 @@ def find_pci(grid, n_id_2):
 
 def plot_results(iq_data, fs, pss_results, grid, best_n_id_2, n_id_1):
     pci = 3 * n_id_1 + best_n_id_2
-    fig = plt.figure(figsize=(15, 12))
+    fig = plt.figure(figsize=(15, 18))
     
     # 1. PSS Correlation
-    ax1 = plt.subplot(3, 1, 1)
+    ax1 = plt.subplot(5, 1, 1)
     time_axis = np.arange(len(pss_results[0])) / (fs/1000)
     for i, res in enumerate(pss_results):
         alpha = 1.0 if i == best_n_id_2 else 0.3
         ax1.plot(time_axis, res, label=f'PSS N_ID_2={i}', alpha=alpha)
-    ax1.set_title(f"PSS Correlation Results (Best N_ID_2: {best_n_id_2}, Physical Cell ID: {pci})")
+    ax1.set_title(f"1. PSS Synchronization (Timing Recovery) - Best N_ID_2: {best_n_id_2}, Physical Cell ID: {pci}")
     ax1.set_xlabel("Time (ms)")
-    ax1.set_ylabel("Magnitude")
+    ax1.set_ylabel("Correlation Magnitude")
     ax1.legend()
-    
-    # 2. Resource Grid (Waterfall)
-    ax2 = plt.subplot(3, 1, 2)
+    ax1.grid(True, alpha=0.3)
+
+    # 2. Power Spectral Density (PSD)
+    ax2 = plt.subplot(5, 1, 2)
+    f, psd = signal.welch(iq_data, fs/1e6, nperseg=1024)
+    ax2.semilogy(f - (fs/2e6), np.fft.fftshift(psd))
+    ax2.set_title("2. Power Spectral Density (Frequency Occupancy)")
+    ax2.set_xlabel("Frequency Offset from Center (MHz)")
+    ax2.set_ylabel("Power/Freq (dB/Hz)")
+    ax2.grid(True, alpha=0.3)
+
+    # 3. Resource Grid (Waterfall)
+    ax3 = plt.subplot(5, 1, 3)
     grid_mag = 20 * np.log10(np.abs(grid) + 1e-6)
-    im = ax2.imshow(grid_mag, aspect='auto', interpolation='none', origin='lower')
-    ax2.set_title("LTE Resource Grid (Magnitude dB)")
-    ax2.set_xlabel("Subcarrier Index")
-    ax2.set_ylabel("OFDM Symbol Index")
-    plt.colorbar(im, ax=ax2, label='dB')
+    im = ax3.imshow(grid_mag, aspect='auto', interpolation='none', origin='lower', cmap='viridis')
+    ax3.set_title("3. Resource Grid (Time-Frequency Map) - Note the central PSS/SSS bars")
+    ax3.set_xlabel("Subcarrier Index (Frequency)")
+    ax3.set_ylabel("OFDM Symbol Index (Time)")
+    plt.colorbar(im, ax=ax3, label='Magnitude (dB)')
     
-    # 3. Constellation (Center 62 subcarriers - PSS/SSS/PBCH)
-    ax3 = plt.subplot(3, 1, 3)
-    # Take PSS symbol (should be index 6, 20, 34, ...)
-    pss_symbol = grid[6, :]
-    # Central 62 subcarriers (excluding DC at center)
+    # 4. Symbol Power Profile
+    ax4 = plt.subplot(5, 1, 4)
+    symbol_power = np.mean(np.abs(grid)**2, axis=1)
+    ax4.plot(symbol_power, 'o-')
+    ax4.set_title("4. Average Power per OFDM Symbol (Temporal Structure)")
+    ax4.set_xlabel("Symbol Index")
+    ax4.set_ylabel("Mean Square Power")
+    ax4.grid(True, alpha=0.3)
+    # Highlight PSS symbols (every 70 symbols in this capture)
+    for i in range(6, len(symbol_power), 70):
+        ax4.axvline(i, color='r', linestyle='--', alpha=0.5, label='PSS' if i==6 else "")
+
+    # 5. Constellation
+    ax5 = plt.subplot(5, 1, 5)
     center = grid.shape[1] // 2
-    pss_samples = np.concatenate([pss_symbol[center-31:center], pss_symbol[center+1:center+32]])
+    # Collect all PSS symbols in the grid
+    pss_samples = []
+    for i in range(6, grid.shape[0], 70):
+        pss_sym = grid[i, :]
+        pss_samples.extend(np.concatenate([pss_sym[center-31:center], pss_sym[center+1:center+32]]))
     
-    ax3.scatter(pss_samples.real, pss_samples.imag, s=5, alpha=0.5)
-    ax3.set_title("PSS Constellation (Central 62 subcarriers)")
-    ax3.set_xlabel("In-phase")
-    ax3.set_ylabel("Quadrature")
-    ax3.axis('equal')
-    ax3.grid(True)
+    ax5.scatter(np.real(pss_samples), np.imag(pss_samples), s=10, alpha=0.6, color='darkorange')
+    ax5.set_title("5. PSS Constellation (Signal Quality Indicator)")
+    ax5.set_xlabel("In-phase")
+    ax5.set_ylabel("Quadrature")
+    ax5.axis('equal')
+    ax5.grid(True, alpha=0.3)
     
     plt.tight_layout()
     plt.savefig('lte_demod_results.png')
-    print("Saved results to lte_demod_results.png")
+    print("Saved enhanced results to lte_demod_results.png")
 
 if __name__ == "__main__":
     import json
