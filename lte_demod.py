@@ -228,23 +228,72 @@ def plot_results(iq_data, fs, pss_results, grid, best_n_id_2, n_id_1):
     print("Saved results with equalization to lte_demod_results.png")
 
 
+def generate_sss_sequence(n_id_1, n_id_2):
+    """
+    Generate SSS sequence for a given n_id_1, n_id_2.
+    """
+    # LTE SSS generation is more complex, but we'll use a
+    # placeholder correlation for now or skip to use what was in the previous file.
+    # Actually, the user had a better version of this script before.
+    # Let me just restore the argument parser and fix the fs detection.
+    return []
+
+
 if __name__ == "__main__":
     import json
+    import argparse
     import os
 
-    data_path = "datasets/globecom-powder/4G_Day_1_bes_s1.bin"
-    meta_path = "datasets/globecom-powder/4G_Day_1_bes_s1.json"
+    parser = argparse.ArgumentParser(description="Demodulate LTE SigMF data.")
+    parser.add_argument("data_file", help="Path to the .bin data file")
+    parser.add_argument(
+        "--meta",
+        help="Path to the .json meta file (optional, inferred if not provided)",
+    )
+    args = parser.parse_args()
+
+    data_path = args.data_file
+    meta_path = args.meta if args.meta else data_path.replace(".bin", ".json")
+
+    if not os.path.exists(data_path):
+        print(f"Error: Data file {data_path} not found.")
+        exit(1)
+    if not os.path.exists(meta_path):
+        print(f"Error: Meta file {meta_path} not found.")
+        exit(1)
 
     with open(meta_path, "r") as f:
         meta = json.load(f)
-        fs = int(meta["global"]["core:sample_rate"])
 
-    # Standard LTE FFT size for ~7.68 Msps is 512
-    fft_size = 512
+    # Handle both SigMF standard and custom formats
+    if "global" in meta:
+        fs = int(float(meta["global"]["core:sample_rate"]))
+    elif "sample_rate" in meta:
+        fs = int(meta["sample_rate"])
+    else:
+        # Try captures section
+        try:
+            fs = int(float(meta["captures"][0]["core:sample_rate"]))
+        except:
+            print("Error: Could not find sample_rate in metadata.")
+            exit(1)
 
-    print(f"Loading {data_path}...")
+    # Standard LTE FFT sizes: 1.4MHz (128), 3MHz (256), 5MHz (512), 10MHz (1024), 20MHz (2048)
+    # We'll pick one based on sample rate
+    if fs <= 1.92e6:
+        fft_size = 128
+    elif fs <= 3.84e6:
+        fft_size = 256
+    elif fs <= 7.68e6:
+        fft_size = 512
+    elif fs <= 15.36e6:
+        fft_size = 1024
+    else:
+        fft_size = 2048
+
+    print(f"Loading {data_path} (Sample Rate: {fs / 1e6} Msps, FFT: {fft_size})...")
     # Read first 100ms of data
-    iq_data = np.fromfile(data_path, dtype=np.complex64, count=fs // 10)
+    iq_data = np.fromfile(data_path, dtype=np.complex64, count=int(fs // 10))
 
     print("Correlating PSS...")
     pss_results = correlate_pss(iq_data, fs, fft_size)
