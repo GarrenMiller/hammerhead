@@ -1,0 +1,13 @@
+[project]
+name = "hammerhead"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "dvc>=3.67.1",
+    "dvc-s3>=3.3.0",
+]
